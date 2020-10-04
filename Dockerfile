@@ -1,5 +1,6 @@
-FROM golang:1.12 as builder
-MAINTAINER Joseph Salisbury <joseph@giantswarm.io>
+FROM alpine:3.8
+
+LABEL maintainer="Joseph Salisbury <joseph@giantswarm.io>"
 
 WORKDIR /go/src/github.com/giantswarm/prometheus-pingdom-exporter
 COPY . .
