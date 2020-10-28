@@ -1,4 +1,4 @@
-FROM alpine:3.12
+FROM golang:1.15 as builder
 
 LABEL maintainer="Joseph Salisbury <joseph@giantswarm.io>"
 
