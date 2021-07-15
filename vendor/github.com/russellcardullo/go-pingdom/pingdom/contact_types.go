@@ -1,63 +1,78 @@
 package pingdom
 
 import (
+	"encoding/json"
 	"fmt"
-	"strconv"
 )
 
-// Contact represents a Pingdom contact
+// NotificationTargets represents different ways a contact could be notified of alerts
+type NotificationTargets struct {
+	SMS   []SMSNotification   `json:"sms,omitempty"`
+	Email []EmailNotification `json:"email,omitempty"`
+	APNS  []APNSNotification  `json:"apns,omitempty"`
+	AGCM  []AGCMNotification  `json:"agcm,omitempty"`
+}
+
+// SMSNotification represents a text message notification
+type SMSNotification struct {
+	CountryCode string `json:"country_code"`
+	Number      string `json:"number"`
+	Provider    string `json:"provider"`
+	Severity    string `json:"severity"`
+}
+
+// EmailNotification represents an email address notification
+type EmailNotification struct {
+	Address  string `json:"address"`
+	Severity string `json:"severity"`
+}
+
+// APNSNotification represents an APNS device notification
+type APNSNotification struct {
+	Device   string `json:"apns_device"`
+	Name     string `json:"device_name"`
+	Severity string `json:"severity"`
+}
+
+// AGCMNotification represents an AGCM notification
+type AGCMNotification struct {
+	AGCMID   string `json:"agcm_id"`
+	Severity string `json:"severity"`
+}
+
+// ContactTeam represents an alerting team from the view of a Contact
+type ContactTeam struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+// Contact represents a Pingdom Contact.
 type Contact struct {
-	Name               string `json:"name"`
-	Email              string `json:"email,omitempty"`
-	Cellphone          string `json:"cellphone,omitempty"`
-	CountryISO         string `json:"countryiso,omitempty"`
-	CountryCode        string `json:"countrycode,omitempty"`
-	DefaultSMSProvider string `json:"defaultsmsprovider,omitempty"`
-	DirectTwitter      bool   `json:"directtwitter,omitempty"`
-	TwitterUser        string `json:"twitteruser,omitempty"`
-	IphoneTokens       string `json:"iphonetokens,omitempty"`
-	AndroidTokens      string `json:"androidtokens,omitempty"`
-	Paused             bool   `json:"paused,omitempty"`
+	ID                  int                 `json:"id"`
+	Name                string              `json:"name"`
+	NotificationTargets NotificationTargets `json:"notification_targets"`
+	Owner               bool                `json:"owner"`
+	Paused              bool                `json:"paused"`
+	Teams               []ContactTeam       `json:"teams"`
+	Type                string              `json:"type"`
 }
 
-// Params returns a map of parameters for a Contact that can be sent along
-// with an HTTP PUT request
-func (ct *Contact) PutParams() map[string]string {
-	m := map[string]string{
-		"name":               ct.Name,
-		"email":              ct.Email,
-		"cellphone":          ct.Cellphone,
-		"countryiso":         ct.CountryISO,
-		"countrycode":        ct.CountryCode,
-		"defaultsmsprovider": ct.DefaultSMSProvider,
-		"directtwitter":      strconv.FormatBool(ct.DirectTwitter),
-		"twitteruser":        ct.TwitterUser,
-	}
-
-	return m
-}
-
-// Params returns a map of parameters for a Contact that can be sent along
-// with an HTTP POST request. They are the same than the Put params, but
-// empty strings cleared out, to avoid Pingdom API reject the request.
-func (ct *Contact) PostParams() map[string]string {
-	params := ct.PutParams()
-
-	for k, v := range params {
-		if v == "" {
-			delete(params, k)
-		}
-	}
-
-	return params
-}
-
-// Determine whether the Contact contains valid fields.  This can be
-// used to guard against sending illegal values to the Pingdom API
-func (ct *Contact) Valid() error {
-	if ct.Name == "" {
+// ValidContact determines whether a Contact contains valid fields.
+func (c *Contact) ValidContact() error {
+	if c.Name == "" {
 		return fmt.Errorf("Invalid value for `Name`.  Must contain non-empty string")
 	}
 
 	return nil
+}
+
+// RenderForJSONAPI returns the JSON formatted version of this object that may be submitted to Pingdom
+func (c *Contact) RenderForJSONAPI() string {
+	u := map[string]interface{}{
+		"name":                 c.Name,
+		"notification_targets": c.NotificationTargets,
+		"paused":               c.Paused,
+	}
+	jsonBody, _ := json.Marshal(u)
+	return string(jsonBody)
 }

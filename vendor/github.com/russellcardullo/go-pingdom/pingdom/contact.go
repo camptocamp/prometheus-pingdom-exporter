@@ -2,20 +2,26 @@ package pingdom
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"strconv"
 )
 
-// ContactService provides an interface to Pingdom notification contacts
+// ContactService provides an interface to Pingdom contacts.
 type ContactService struct {
 	client *Client
 }
 
-// Return a list of contacts from Pingdom.
-// This returns type ContactResponse rather than Contact since the
-// pingdom API does not return a complete representation of a contact.
-func (cs *ContactService) List() ([]ContactResponse, error) {
-	req, err := cs.client.NewRequest("GET", "/api/2.0/notification_contacts", nil)
+// ContactAPI is an interface representing a Pingdom Contact.
+type ContactAPI interface {
+	RenderForJSONAPI() string
+	ValidContact() error
+}
+
+// List returns a list of all contacts and their contact details.
+func (cs *ContactService) List() ([]Contact, error) {
+
+	req, err := cs.client.NewRequest("GET", "/alerting/contacts", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -32,42 +38,56 @@ func (cs *ContactService) List() ([]ContactResponse, error) {
 
 	bodyBytes, _ := ioutil.ReadAll(resp.Body)
 	bodyString := string(bodyBytes)
-	m := &listContactsJsonResponse{}
-	err = json.Unmarshal([]byte(bodyString), &m)
 
-	return m.Contacts, err
+	u := &listContactsJSONResponse{}
+	err = json.Unmarshal([]byte(bodyString), &u)
+
+	return u.Contacts, err
 }
 
-// Create a new contact.  This function will validate the given contact param
-// to ensure that it contains correct values before submitting the request
-// Returns a ContactResponse object representing the response from Pingdom.
-func (cs *ContactService) Create(contact *Contact) (*ContactResponse, error) {
-	if err := contact.Valid(); err != nil {
-		return nil, err
-	}
-
-	req, err := cs.client.NewRequest("POST", "/api/2.0/notification_contacts", contact.PostParams())
+// Read return a contact object from Pingdom.
+func (cs *ContactService) Read(contactID int) (*Contact, error) {
+	req, err := cs.client.NewRequest("GET", "/alerting/contacts/"+strconv.Itoa(contactID), nil)
 	if err != nil {
 		return nil, err
 	}
 
-	m := &contactDetailsJsonResponse{}
+	c := &contactDetailsJSONResponse{}
+	_, err = cs.client.Do(req, c)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.Contact, nil
+}
+
+// Create adds a new contact.
+func (cs *ContactService) Create(contact ContactAPI) (*Contact, error) {
+	if err := contact.ValidContact(); err != nil {
+		return nil, err
+	}
+
+	req, err := cs.client.NewJSONRequest("POST", "/alerting/contacts", contact.RenderForJSONAPI())
+	if err != nil {
+		return nil, err
+	}
+
+	m := &createContactJSONResponse{}
 	_, err = cs.client.Do(req, m)
 	if err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 	return m.Contact, err
 }
 
-// UpdateContact will update the contact represented by the given ID with the values
-// in the given contact.  You should submit the complete list of values in
-// the given check parameter, not just those that have changed.
-func (cs *ContactService) Update(id int, contact *Contact) (*PingdomResponse, error) {
-	if err := contact.Valid(); err != nil {
+// Update a contact's core properties not contact targets.
+func (cs *ContactService) Update(id int, contact ContactAPI) (*PingdomResponse, error) {
+	if err := contact.ValidContact(); err != nil {
 		return nil, err
 	}
 
-	req, err := cs.client.NewRequest("PUT", "/api/2.0/notification_contacts/"+strconv.Itoa(id), contact.PutParams())
+	req, err := cs.client.NewJSONRequest("PUT", "/alerting/contacts/"+strconv.Itoa(id), contact.RenderForJSONAPI())
 	if err != nil {
 		return nil, err
 	}
@@ -80,9 +100,9 @@ func (cs *ContactService) Update(id int, contact *Contact) (*PingdomResponse, er
 	return m, err
 }
 
-// DeleteCheck will delete the check for the given ID.
+// Delete removes a contact from Pingdom.
 func (cs *ContactService) Delete(id int) (*PingdomResponse, error) {
-	req, err := cs.client.NewRequest("DELETE", "/api/2.0/notification_contacts/"+strconv.Itoa(id), nil)
+	req, err := cs.client.NewRequest("DELETE", "/alerting/contacts/"+strconv.Itoa(id), nil)
 	if err != nil {
 		return nil, err
 	}

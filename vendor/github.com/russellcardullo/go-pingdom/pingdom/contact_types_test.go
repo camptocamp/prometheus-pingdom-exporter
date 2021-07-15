@@ -1,81 +1,31 @@
 package pingdom
 
 import (
-	"reflect"
+	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func TestContactPutParams(t *testing.T) {
+func TestContact_ValidContact_Positive(t *testing.T) {
+	name := "testName"
 	contact := Contact{
-		Name:               "John Doe",
-		Cellphone:          "76543210",
-		CountryCode:        "44",
-		CountryISO:         "GB",
-		DefaultSMSProvider: "nexmo",
-		TwitterUser:        "real-john-doe",
-		Email:              "john.doe@site.com",
-	}
-	params := contact.PutParams()
-
-	want := map[string]string{
-		"name":               contact.Name,
-		"email":              contact.Email,
-		"cellphone":          contact.Cellphone,
-		"countryiso":         contact.CountryISO,
-		"countrycode":        contact.CountryCode,
-		"defaultsmsprovider": contact.DefaultSMSProvider,
-		"directtwitter":      "false",
-		"twitteruser":        contact.TwitterUser,
+		Name: name,
 	}
 
-	if !reflect.DeepEqual(params, want) {
-		t.Errorf("Contact.PutParams() returned %+v, want %+v", params, want)
-	}
+	err := contact.ValidContact()
+
+	assert.Equal(t, nil, err, "Contact.ValidContact() should return nil")
 }
 
-func TestContactPostParams(t *testing.T) {
+func TestContact_ValidContact_Negative(t *testing.T) {
 	contact := Contact{
-		Name:               "John Doe",
-		Cellphone:          "76543210",
-		CountryCode:        "44",
-		CountryISO:         "GB",
-		DefaultSMSProvider: "nexmo",
-		TwitterUser:        "real-john-doe",
-		Email:              "john.doe@site.com",
-	}
-	params := contact.PostParams()
-
-	want := map[string]string{
-		"name":               contact.Name,
-		"email":              contact.Email,
-		"cellphone":          contact.Cellphone,
-		"countryiso":         contact.CountryISO,
-		"countrycode":        contact.CountryCode,
-		"defaultsmsprovider": contact.DefaultSMSProvider,
-		"directtwitter":      "false",
-		"twitteruser":        contact.TwitterUser,
+		Name: "",
 	}
 
-	if !reflect.DeepEqual(params, want) {
-		t.Errorf("Contact.PutParams() returned %+v, want %+v", params, want)
-	}
-}
+	want := fmt.Errorf("Invalid value for `Name`.  Must contain non-empty string")
 
-func TestContactValid(t *testing.T) {
-	contact := Contact{
-		Name:      "John Doe",
-		Cellphone: "76543210",
-	}
+	err := contact.ValidContact()
 
-	if err := contact.Valid(); err != nil {
-		t.Errorf("Valid with valid contact returned error %+v", err)
-	}
-
-	contact = Contact{
-		Name:      "",
-		Cellphone: "76543210",
-	}
-	if err := contact.Valid(); err == nil {
-		t.Errorf("Valid with invalid contact expected error, returned nil")
-	}
+	assert.Equal(t, want, err, "Contact.ValidContact() should return error")
 }

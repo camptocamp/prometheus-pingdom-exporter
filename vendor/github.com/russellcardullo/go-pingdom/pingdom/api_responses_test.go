@@ -3,17 +3,15 @@ package pingdom
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-var detailedCheckJson = `
+var detailedCheckJSON = `
 {
 	"id" : 85975,
 	"name" : "My check 7",
 	"resolution" : 1,
-	"sendtoemail" : false,
-	"sendtosms" : false,
-	"sendtotwitter" : false,
-	"sendtoiphone" : false,
 	"sendnotificationwhendown" : 0,
 	"notifyagainevery" : 0,
 	"notifywhenbackup" : false,
@@ -30,38 +28,112 @@ var detailedCheckJson = `
 	},
 	"hostname" : "s7.mydomain.com",
 	"status" : "up",
+	"severity_level": "HIGH",
 	"lasterrortime" : 1293143467,
 	"lasttesttime" : 1294064823,
-	"tags": []
+	"tags": [],
+	"responsetime_threshold": 2300
 }
 `
 
 func TestPingdomError(t *testing.T) {
 	pe := PingdomError{StatusCode: 400, StatusDesc: "Bad Request", Message: "Missing param foo"}
 	want := "400 Bad Request: Missing param foo"
-	if e := pe.Error(); e != want {
-		t.Errorf("Error() returned '%+v', want '%+v'", e, want)
-	}
-
+	assert.Equal(t, want, pe.Error())
 }
 
 func TestCheckResponseUnmarshal(t *testing.T) {
 	var ck CheckResponse
+	err := json.Unmarshal([]byte(detailedCheckJSON), &ck)
+	assert.NoError(t, err)
+	assert.Equal(t, "http", ck.Type.Name)
+	assert.NotNil(t, ck.Type.HTTP)
+	assert.Equal(t, 2, len(ck.Type.HTTP.RequestHeaders))
+	assert.Equal(t, "HIGH", ck.SeverityLevel)
+}
 
-	err := json.Unmarshal([]byte(detailedCheckJson), &ck)
-	if err != nil {
-		t.Errorf("Error running json.Unmarshal for CheckResponse: '%+v'", err)
-	}
-	if ck.Type.Name != "http" {
-		t.Errorf("CheckResponse.Type.Name should be populated. returned '%+v', want '%+v'", ck.Type.Name, "http")
-	}
+var detailedContactJSON = `
+{
+	"contacts": [
+		{
+			"id": 1,
+			"name": "John Doe",
+			"paused": false,
+			"type": "user",
+			"owner": true,
+			"notification_targets": {
+				"email": [
+					{
+					"severity": "HIGH",
+					"address": "johndoe@teamrocket.com"
+					}
+				],
+				"sms": [
+					{
+					"severity": "HIGH",
+					"country_code": "00",
+					"number": "111111111",
+					"provider": "provider's name"
+					}
+				]
+			},
+			"teams": [
+				{
+					"id": 123456,
+					"name": "The Dream Team"
+				}
+			]
+		},
+		{
+			"id": 2,
+			"name": "John \"Hannibal\" Smith",
+			"paused": true,
+			"type": "user",
+			"notification_targets": {
+			"email": [
+				{
+				"severity": "HIGH",
+				"address": "hannibal@ateam.org"
+				}
+			],
+			"sms": [
+				{
+				"severity": "HIGH",
+				"country_code": "00",
+				"number": "222222222",
+				"provider": "provider's name"
+				}
+			]
+			},
+			"teams": []
+		}
+	]
+}
+`
 
-	if ck.Type.HTTP == nil {
-		t.Errorf("CheckResponse.Type.HTTP should be populated.")
-		return
+func TestCheckContactUnmarshal(t *testing.T) {
+	var contacts listContactsJSONResponse
+	err := json.Unmarshal([]byte(detailedContactJSON), &contacts)
+	contact := contacts.Contacts[0]
+
+	expectedNotificationTargets := NotificationTargets{
+		SMS: []SMSNotification{
+			SMSNotification{
+				Severity:    "HIGH",
+				CountryCode: "00",
+				Number:      "111111111",
+				Provider:    "provider's name",
+			},
+		},
+		Email: []EmailNotification{
+			EmailNotification{
+				Severity: "HIGH",
+				Address:  "johndoe@teamrocket.com",
+			},
+		},
 	}
-	rhl := len(ck.Type.HTTP.RequestHeaders)
-	if rhl != 2 {
-		t.Errorf("CheckResponse.Type.HTTP.RequestHeaders should be populated. length returned '%+v', want '%+v'", rhl, 2)
-	}
+	assert.NoError(t, err)
+	assert.Equal(t, "John Doe", contact.Name)
+	assert.NotNil(t, contact.ID)
+	assert.Equal(t, expectedNotificationTargets, contact.NotificationTargets)
 }
