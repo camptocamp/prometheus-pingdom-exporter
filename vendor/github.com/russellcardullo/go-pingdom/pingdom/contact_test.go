@@ -3,122 +3,279 @@ package pingdom
 import (
 	"fmt"
 	"net/http"
-	"reflect"
+	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func TestContactServiceList(t *testing.T) {
+func TestContactService_List(t *testing.T) {
 	setup()
 	defer teardown()
 
-	mux.HandleFunc("/api/2.0/notification_contacts", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/alerting/contacts", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
 		fmt.Fprint(w, `{
-      "contacts": [
-        {
-          "id": 11111111,
-          "name": "John Doe",
-          "type": "Notification contact"
-        },
-        {
-          "id": 22222222,
-          "name": "Jane Doe",
-          "type": "Notification contact"
-        }
-      ]
-    }`)
+			"contacts": [
+				{
+					"id": 1,
+					"name": "John Doe",
+					"paused": false,
+					"type": "user",
+					"owner": true,
+					"notification_targets": {
+						"email": [
+							{
+								"severity": "HIGH",
+								"address": "johndoe@teamrocket.com"
+							}
+						],
+						"sms": [
+							{
+								"severity": "HIGH",
+								"country_code": "00",
+								"number": "111111111",
+								"provider": "provider's name"
+							}
+						]
+					},
+					"teams": [
+						{
+							"id": 123456,
+							"name": "The Dream Team"
+						}
+					]
+				},
+				{
+					"id": 2,
+					"name": "John \"Hannibal\" Smith",
+					"paused": true,
+					"type": "user",
+					"notification_targets": {
+						"email": [
+							{
+								"severity": "HIGH",
+								"address": "hannibal@ateam.org"
+							}
+						],
+						"sms": [
+							{
+								"severity": "HIGH",
+								"country_code": "00",
+								"number": "222222222",
+								"provider": "provider's name"
+							}
+						]
+					},
+					"teams": []
+				}
+			]
+		}`)
 	})
+	want := []Contact{
+		{
+			ID:     1,
+			Paused: false,
+			Name:   "John Doe",
+			Owner:  true,
+			Teams: []ContactTeam{
+				{
+					ID:   123456,
+					Name: "The Dream Team",
+				},
+			},
+			Type: "user",
+			NotificationTargets: NotificationTargets{
+				SMS: []SMSNotification{
+					{
+						Severity:    "HIGH",
+						CountryCode: "00",
+						Number:      "111111111",
+						Provider:    "provider's name",
+					},
+				},
+				Email: []EmailNotification{
+					{
+						Severity: "HIGH",
+						Address:  "johndoe@teamrocket.com",
+					},
+				},
+			},
+		},
+		{
+			ID:     2,
+			Paused: true,
+			Name:   "John \"Hannibal\" Smith",
+			Type:   "user",
+			Teams:  []ContactTeam{},
+			NotificationTargets: NotificationTargets{
+				SMS: []SMSNotification{
+					{
+						Severity:    "HIGH",
+						CountryCode: "00",
+						Number:      "222222222",
+						Provider:    "provider's name",
+					},
+				},
+				Email: []EmailNotification{
+					{
+						Severity: "HIGH",
+						Address:  "hannibal@ateam.org",
+					},
+				},
+			},
+		},
+	}
 
 	contacts, err := client.Contacts.List()
-	if err != nil {
-		t.Errorf("ListContacts returned error: %v", err)
-	}
-
-	want := []ContactResponse{
-		ContactResponse{
-			ID:   11111111,
-			Name: "John Doe",
-			Type: "Notification contact",
-		},
-		ContactResponse{
-			ID:   22222222,
-			Name: "Jane Doe",
-			Type: "Notification contact",
-		},
-	}
-
-	if !reflect.DeepEqual(contacts, want) {
-		t.Errorf("ListContacts returned %+v, want %+v", contacts, want)
-	}
+	assert.NoError(t, err)
+	assert.Equal(t, want, contacts, "Contacts.List() should return correct result")
 }
 
-func TestContactServiceCreate(t *testing.T) {
+func TestContactService_Read(t *testing.T) {
 	setup()
 	defer teardown()
 
-	mux.HandleFunc("/api/2.0/notification_contacts", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/alerting/contacts/123456", func(w http.ResponseWriter, r *http.Request) {
+		testMethod(t, r, "GET")
+		fmt.Fprint(w, `{
+			"contact": {
+				"id": 123456,
+				"name": "John Doe",
+				"paused": false,
+				"type": "user",
+				"owner": true,
+				"notification_targets": {
+					"email": [
+						{
+							"severity": "HIGH",
+							"address": "johndoe@teamrocket.com"
+						}
+					],
+					"sms": [
+						{
+							"severity": "HIGH",
+							"country_code": "00",
+							"number": "111111111",
+							"provider": "provider's name"
+						}
+					]
+				},
+				"teams": [
+					{
+						"id": 123456,
+						"name": "The Dream Team"
+					}
+				]
+			}
+		  }`)
+	})
+	want := Contact{
+		ID:     123456,
+		Paused: false,
+		Name:   "John Doe",
+		Owner:  true,
+		Type:   "user",
+		NotificationTargets: NotificationTargets{
+			SMS: []SMSNotification{
+				SMSNotification{
+					Severity:    "HIGH",
+					CountryCode: "00",
+					Number:      "111111111",
+					Provider:    "provider's name",
+				},
+			},
+			Email: []EmailNotification{
+				{
+					Address:  "johndoe@teamrocket.com",
+					Severity: "HIGH",
+				},
+			},
+		},
+		Teams: []ContactTeam{
+			{
+				ID:   123456,
+				Name: "The Dream Team",
+			},
+		},
+	}
+
+	contacts, err := client.Contacts.Read(123456)
+	assert.NoError(t, err)
+	assert.Equal(t, &want, contacts, "Contacts.Read(123456) should return a contact")
+}
+
+func TestContactService_Create(t *testing.T) {
+	setup()
+	defer teardown()
+
+	mux.HandleFunc("/alerting/contacts", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "POST")
 		fmt.Fprint(w, `{
-      "contact":{
-        "id":33333333,
-        "name":"Michael Doe"
-      }
-    }`)
+			"contact": {
+				"id": 23439
+			}
+		}`)
 	})
 
-	newContact := Contact{
-		Name:      "Michael Doe",
-		Email:     "michael.doe@site.com",
-		Cellphone: "76543210",
-	}
-	contact, err := client.Contacts.Create(&newContact)
-	if err != nil {
-		t.Errorf("CreateContact returned error: %v", err)
+	want := &Contact{
+		ID: 23439,
 	}
 
-	want := &ContactResponse{ID: 33333333, Name: "Michael Doe"}
-	if !reflect.DeepEqual(contact, want) {
-		t.Errorf("CreateContact returned %+v, want %+v", newContact, want)
+	u := Contact{
+		Name: "testContact",
 	}
+
+	contact, err := client.Contacts.Create(&u)
+	assert.NoError(t, err)
+	assert.Equal(t, want, contact, "Contacts.Create() should return correct result")
 }
 
-func TestContactServiceUpdate(t *testing.T) {
+func TestContactService_Delete(t *testing.T) {
 	setup()
 	defer teardown()
 
-	mux.HandleFunc("/api/2.0/notification_contacts/11111111", func(w http.ResponseWriter, r *http.Request) {
-		testMethod(t, r, "PUT")
-		fmt.Fprint(w, `{"message":"Modification of contact was successful!"}`)
-	})
+	contactID := 12941
 
-	updateContact := Contact{Name: "John Doe", Email: "jdoe@site.com"}
-	msg, err := client.Contacts.Update(11111111, &updateContact)
-	if err != nil {
-		t.Errorf("UpdateContact returned error: %v", err)
-	}
-
-	want := &PingdomResponse{Message: "Modification of contact was successful!"}
-	if !reflect.DeepEqual(msg, want) {
-		t.Errorf("UpdateContact returned %+v, want %+v", msg, want)
-	}
-}
-
-func TestContactServiceDelete(t *testing.T) {
-	setup()
-	defer teardown()
-
-	mux.HandleFunc("/api/2.0/notification_contacts/33333333", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/alerting/contacts/"+strconv.Itoa(contactID), func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "DELETE")
-		fmt.Fprint(w, `{"message":"Deletion of contact was successful!"}`)
+		fmt.Fprint(w, `{
+			"message":"Deletion of contact was successful!"
+		}`)
 	})
 
-	msg, err := client.Contacts.Delete(33333333)
-	if err != nil {
-		t.Errorf("DeleteContact returned error: %v", err)
+	want := &PingdomResponse{
+		Message: "Deletion of contact was successful!",
 	}
 
-	want := &PingdomResponse{Message: "Deletion of contact was successful!"}
-	if !reflect.DeepEqual(msg, want) {
-		t.Errorf("DeleteContact returned %+v, want %+v", msg, want)
+	response, err := client.Contacts.Delete(contactID)
+	assert.NoError(t, err)
+	assert.Equal(t, want, response, "Contacts.Delete() should return PingdomResponse with message")
+
+}
+
+func TestContactService_Update(t *testing.T) {
+	setup()
+	defer teardown()
+
+	contactID := 12941
+	contact := Contact{
+		Name: "updatedName",
 	}
+
+	mux.HandleFunc("/alerting/contacts/"+strconv.Itoa(contactID), func(w http.ResponseWriter, r *http.Request) {
+		testMethod(t, r, "PUT")
+		fmt.Fprint(w, `{
+			"message":"Modification of contact was successful!"
+		}`)
+	})
+
+	want := &PingdomResponse{
+		Message: "Modification of contact was successful!",
+	}
+
+	response, err := client.Contacts.Update(contactID, &contact)
+	assert.NoError(t, err)
+	assert.Equal(t, want, response, "Contacts.Update() should return PingdomResponse with message")
+
 }
